@@ -1,82 +1,64 @@
-# Análisis de Adquisición de Datos (TIM2 + ADC + DMA)
+# Análisis Matemático de la Cadena de Adquisición (DAQ)
 
-Para garantizar que la adquisición de señales refleje fielmente el comportamiento analógico (especialmente en transmisores de alta frecuencia como los de **5G mmWave de 25 GHz**) sin pérdida de muestras, el sistema entrelaza tres periféricos que operan de forma autónoma mediante hardware, liberando carga de procesamiento a la CPU.
+El sistema de adquisición de datos para el control de potencia en el transmisor 5G mmWave de 25 GHz está fundamentado en una arquitectura de hardware autónoma. Esta topología entrelaza tres periféricos críticos (TIM2, ADC1, DMA1) para garantizar un **determinismo temporal estricto** sin la intervención de la Unidad Central de Procesamiento (CPU).
 
 ---
 
-## 1. Temporización: El Timer 2 como "Master Clock"
-El **Timer 2 (TIM2)** actúa como el director de orquesta o marcapasos del sistema. En lugar de generar interrupciones que saturen la CPU, utiliza una señal de hardware denominada **TRGO (Trigger Output)**.
+## 1. Arquitectura de Sincronización y Temporización
 
-### Configuración del Reloj
-* **Frecuencia del sistema ($f_{SYS}$):** $80 \text{ MHz}$ (Configurado vía PLL en `SystemClock_Config`).
-* **Frecuencia de muestreo ($f_s$):** Determinada por el *Prescaler* y el *Periodo* (Auto-reload Register).
+El temporizador **TIM2** opera como el generador de la señal de disparo maestro (TRGO). La frecuencia de actualización, que dicta el periodo de muestreo, se determina mediante la frecuencia del bus del sistema ($f_{SYS}$), el pre-escalador ($PSC$) y el periodo de auto-recarga ($ARR$).
 
-### Cálculo Matemático
-La fórmula para la frecuencia de disparo del trigger es:
+Dada una configuración del PLL que establece la frecuencia del sistema en **80 MHz**, los parámetros definidos en el firmware ($PSC = 79$, $ARR = 1$) producen la siguiente frecuencia de interrupción ($f_s$):
+
 $$f_s = \frac{f_{SYS}}{(PSC + 1) \times (ARR + 1)}$$
 
-Sustituyendo los valores del firmware:
-* **Prescaler (PSC):** 79
-* **Period (ARR):** 1
-
-$$f_s = \frac{80,000,000}{(79 + 1) \times (1 + 1)} = \frac{80,000,000}{80 \times 2} = 500 \text{ kHz}$$
+$$f_s = \frac{80,000,000}{(79 + 1) \times (1 + 1)} = \frac{80,000,000}{80 \times 2} = 500,000 \text{ Hz}$$
 
 > [!NOTE]
-> Esto resulta en un periodo de muestreo estricto de **$T_s = 2 \ \mu s$**, cumpliendo con la definición `#define FS_HZ 500000`.
+> El periodo de muestreo estricto resultante es **$T_s =$ 2.0 µs**, asegurando una base de tiempo constante para el control integral-difuso.
 
 ---
 
-## 2. Digitalización: ADC en Modo Escaneo (Scan Mode)
-Cada vez que el `TIM2_TRGO` emite un pulso, el ADC se activa instantáneamente.
+## 2. Tiempos de Conversión Analógico-Digital
 
-* **Configuración:** 2 canales, resolución de 12 bits.
-* **Modo Escaneo:** El ADC lee secuencialmente el **Canal 8** (ej. entrada de potencia) y el **Canal 4** (ej. salida de potencia) en un solo ciclo de disparo.
-* **Cuantificación:** La señal se mapea en un rango de $0$ a $4095$ ($2^{12}$ niveles discretos).
+El conversor **ADC1** opera en *Scan Mode* secuencial para dos canales (Canal 8 para entrada de potencia y Canal 4 para salida) con una resolución de 12 bits. El tiempo total de conversión ($T_{conv\_total}$) es la suma de los ciclos requeridos para el muestreo de la capacitancia interna y los ciclos de aproximación sucesiva.
 
----
+Para el Canal 8, configurado con `ADC_SAMPLETIME_47CYCLES_5`, el tiempo en ciclos de reloj de ADC ($C_{ch8}$) es:
 
-## 3. Transferencia: DMA y Gestión de Memoria
-El **DMA (Direct Memory Access)** es el encargado de mover los datos del ADC a la RAM sin intervención del procesador.
+$$C_{ch8} = 47.5 \text{ (muestreo)} + 12.5 \text{ (resolución)} = 60 \text{ ciclos}$$
 
-* **Estructura del Buffer:** Los datos se almacenan de forma entrelazada en `adc_buffer`:
-  `[CH8_0, CH4_0, CH8_1, CH4_1, ..., CH8_N, CH4_N]`
-* **Estrategia de Captura:** La arquitectura utiliza un disparo único (**Single-Shot**) para capturar un bloque transitorio de **$N = 5000$** muestras.
-* **Control de Flujo:** Al completarse la transferencia, la interrupción `HAL_ADC_ConvCpltCallback` detiene deliberadamente el Timer y el ADC para evitar que nuevos datos sobrescriban la captura transitoria.
+Asumiendo idéntica parametrización para el Canal 4, el requisito total para un barrido completo es de **120 ciclos**. Con un reloj de ADC derivado sincrónicamente a **80 MHz**, el tiempo físico de conversión es:
+
+$$T_{conv\_total} = \frac{120 \text{ ciclos}}{80,000,000 \text{ Hz}} = 1.5 \text{ \mu s}$$
 
 ---
 
-## 4. Análisis de Holgura (Timing Slack)
-Es crítico verificar si el ADC es capaz de procesar ambos canales antes de que llegue el siguiente pulso del Timer.
+## 3. Transferencia de Datos (DMA)
 
-### Tiempo Disponible ($T_{available}$)
-Como $f_s = 500 \text{ kHz}$, el tiempo entre disparos es:
-$$T_{trigger} = \frac{1}{500,000 \text{ Hz}} = 2.0 \ \mu s$$
+Para evitar que la CPU invierta ciclos de reloj leyendo los registros del ADC, el **DMA1** (Acceso Directo a Memoria) traslada automáticamente cada muestra al `adc_buffer` en la memoria RAM. 
 
-### Tiempo de Conversión del ADC ($T_{conv\_total}$)
-El tiempo de conversión para un canal es la suma del tiempo de muestreo y el tiempo de resolución (12.5 ciclos para 12 bits):
-$$T_{ch} = \text{Sample Time} + 12.5 \text{ ciclos}$$
+Se utiliza una arquitectura de disparo único (*Single-Shot*) para capturar un bloque transitorio definido. Al completarse la transferencia de las muestras, la interrupción del DMA desactiva el TIM2 y el ADC, protegiendo la integridad del búfer de datos contra sobreescrituras antes de que el controlador difuso procese la información.
 
-1. **Canal 8:** Configurado a `ADC_SAMPLETIME_47CYCLES_5`. Total = $47.5 + 12.5 = 60 \text{ ciclos}$.
-2. **Canal 4:** Configuración idéntica. Total = $60 \text{ ciclos}$.
-3. **Total Scan (2 canales):** $120 \text{ ciclos de reloj del ADC}$.
+---
 
-Si el reloj del ADC ($f_{ADC}$) corre a $80 \text{ MHz}$:
-$$T_{conv\_total} = \frac{120 \text{ ciclos}}{80,000,000 \text{ Hz}} = 1.5 \ \mu s$$
+## 4. Análisis de Holgura Temporal (Slack Time)
 
-### Cálculo de la Holgura (Slack)
-$$\text{Holgura} = T_{trigger} - T_{conv\_total} = 2.0 \ \mu s - 1.5 \ \mu s = \mathbf{0.5 \ \mu s}$$
+Para asegurar que no exista solapamiento de datos ni condiciones de carrera en el bus AHB durante la transferencia del DMA, es imperativo que el tiempo de conversión sea estrictamente menor al periodo de muestreo. 
+
+La holgura temporal ($\Delta t_{slack}$) del sistema se define como:
+
+$$\Delta t_{slack} = T_s - T_{conv\_total}$$
+
+$$\Delta t_{slack} = 2.0 \text{ \mu s} - 1.5 \text{ \mu s} = 0.5 \text{ \mu s}$$
 
 > [!IMPORTANT]
-> Existe un **25% de margen de seguridad**. El sistema es estable y no hay riesgo de colisión de muestras (*overrun*).
+> **Estabilidad del Sistema:** El DAQ presenta una holgura del **25%** respecto al ciclo de trabajo de la señal de disparo. Esto demuestra estabilidad matemática para operar a **500 kHz** sin pérdida de tramas (*frame drops*) ni colisiones en memoria.
 
 ---
 
-## 5. Optimización y Límites
+## 5. Integridad de Señal e Impedancia
 
-1. **Reducción del Tiempo de Muestreo:** Podrías bajar a `ADC_SAMPLETIME_12CYCLES_5`.
-   * *Riesgo:* Si los detectores **LTC5596** tienen alta impedancia de salida, bajar los ciclos distorsionará la lectura debido a una carga incompleta del capacitor de muestreo.
-2. **Límite Físico:** El límite teórico de frecuencia para esta configuración de 120 ciclos es:
-   $$f_{s\_max} = \frac{1}{1.5 \ \mu s} \approx 666 \text{ kHz}$$
+Aunque matemáticamente es posible reducir $T_{conv\_total}$ disminuyendo los ciclos de muestreo del ADC (por ejemplo, a `12.5` ciclos) para aumentar la frecuencia de adquisición, esta práctica está contraindicada para este diseño de RF.
 
-### Recomendación Técnica
-Dada la aplicación en **control de potencia 5G**, la holgura de $0.5 \ \mu s$ es valiosa para absorber pequeñas latencias en el bus AHB. Se recomienda mantener los ciclos de muestreo actuales para asegurar la integridad de la señal.
+> [!WARNING]
+> **Riesgo de Distorsión:** Una reducción adicional del tiempo de muestreo podría introducir distorsión armónica y lecturas erróneas. Si la impedancia de salida de los detectores **LTC5596** interactúa negativamente con tiempos de carga de la red capacitiva interna del ADC inferiores a **47.5 ciclos**, el capacitor no alcanzará el voltaje en estado estacionario de la envolvente de RF, comprometiendo la precisión del lazo de control de potencia.
