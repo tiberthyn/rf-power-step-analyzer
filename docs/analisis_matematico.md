@@ -15,7 +15,7 @@ $$f_s = \frac{f_{SYS}}{(PSC + 1) \times (ARR + 1)}$$
 $$f_s = \frac{80,000,000}{(79 + 1) \times (1 + 1)} = 500,000 \text{ Hz}$$
 
 > [!NOTE]
-> El periodo de muestreo estricto resultante es $T_s =$ **2.0 µs**, asegurando una base de tiempo constante y confiable para la correcta identificación paramétrica del sistema.
+> El periodo de muestreo estricto resultante es $T_s = \mathbf{2.0 \ \mu s}$, asegurando una base de tiempo constante y confiable para la correcta identificación paramétrica del sistema.
 
 ---
 
@@ -29,7 +29,7 @@ $$C_{ch8} = 47.5 \text{ (muestreo)} + 12.5 \text{ (resolución)} = 60 \text{ cic
 
 Asumiendo idéntica parametrización para el Canal 4, el requisito total para un barrido completo es de **120 ciclos**. Con un reloj de ADC derivado sincrónicamente a **80 MHz**, el tiempo físico de conversión es:
 
-$$T_{conv\_total} = \frac{120}{80,000,000} = 1.5 \text{ \mu s}$$
+$$T_{conv\_total} = \frac{120}{80,000,000} = 1.5 \ \mu\text{s}$$
 
 ---
 
@@ -49,7 +49,7 @@ La holgura temporal ($\Delta t_{slack}$) del sistema se define como:
 
 $$\Delta t_{slack} = T_s - T_{conv\_total}$$
 
-$$\Delta t_{slack} = 2.0 \text{ \mu s} - 1.5 \text{ \mu s} = 0.5 \text{ \mu s}$$
+$$\Delta t_{slack} = 2.0 \ \mu\text{s} - 1.5 \ \mu\text{s} = 0.5 \ \mu\text{s}$$
 
 > [!IMPORTANT]
 > **Estabilidad del Sistema:** El DAQ presenta una holgura del **25%** respecto al ciclo de trabajo de la señal de disparo. Esto demuestra estabilidad matemática para operar a **500 kHz** sin pérdida de tramas (*frame drops*) ni colisiones en memoria durante el transitorio.
