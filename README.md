@@ -5,7 +5,7 @@ Este repositorio contiene el firmware en C y las herramientas computacionales as
 
 Esta caracterización experimental constituye una fase fundamental para el modelado matemático de plantas de radiofrecuencia. Al proveer datos empíricos de alta fidelidad, el sistema permite realizar una rigurosa **identificación paramétrica del sistema** físico. Este procedimiento es esencial para extraer la función de transferencia empírica, analizar la dinámica del hardware y construir modelos matemáticos precisos del comportamiento de la potencia en transmisores 5G mmWave operando en la banda de 25 GHz.
 
-![alt text](\Figures\diagrama.png)
+![alt text](Figures\diagrama.png)
 
 ## Arquitectura de Hardware e Interfaz
 El sistema orquesta múltiples periféricos operando a nivel de hardware para garantizar latencia determinista en la captura del transitorio:
