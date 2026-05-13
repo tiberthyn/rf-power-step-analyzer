@@ -1,6 +1,6 @@
 # Análisis Matemático de la Cadena de Adquisición (DAQ)
 
-El sistema de adquisición de datos para el control de potencia en el transmisor 5G mmWave de 25 GHz está fundamentado en una arquitectura de hardware autónoma. Esta topología entrelaza tres periféricos críticos (TIM2, ADC1, DMA1) para garantizar un **determinismo temporal estricto** sin la intervención de la Unidad Central de Procesamiento (CPU).
+El sistema de adquisición de datos en el transmisor 5G mmWave de 25 GHz está fundamentado en una arquitectura de hardware autónoma. Esta topología entrelaza tres periféricos críticos (TIM2, ADC1, DMA1) para garantizar un **determinismo temporal estricto** sin la intervención de la Unidad Central de Procesamiento (CPU), con el objetivo fundamental de capturar fielmente la **respuesta transitoria** para la **identificación del sistema**.
 
 ---
 
@@ -12,10 +12,10 @@ Dada una configuración del PLL que establece la frecuencia del sistema en **80 
 
 $$f_s = \frac{f_{SYS}}{(PSC + 1) \times (ARR + 1)}$$
 
-$$f_s = \frac{80,000,000}{(79 + 1) \times (1 + 1)} = \frac{80,000,000}{80 \times 2} = 500,000 \text{ Hz}$$
+$$f_s = \frac{80,000,000}{(79 + 1) \times (1 + 1)} = 500,000 \text{ Hz}$$
 
 > [!NOTE]
-> El periodo de muestreo estricto resultante es **$T_s =$ 2.0 µs**, asegurando una base de tiempo constante para el control integral-difuso.
+> El periodo de muestreo estricto resultante es $T_s =$ **2.0 µs**, asegurando una base de tiempo constante y confiable para la correcta identificación paramétrica del sistema.
 
 ---
 
@@ -29,15 +29,15 @@ $$C_{ch8} = 47.5 \text{ (muestreo)} + 12.5 \text{ (resolución)} = 60 \text{ cic
 
 Asumiendo idéntica parametrización para el Canal 4, el requisito total para un barrido completo es de **120 ciclos**. Con un reloj de ADC derivado sincrónicamente a **80 MHz**, el tiempo físico de conversión es:
 
-$$T_{conv\_total} = \frac{120 \text{ ciclos}}{80,000,000 \text{ Hz}} = 1.5 \text{ \mu s}$$
+$$T_{conv\_total} = \frac{120}{80,000,000} = 1.5 \text{ \mu s}$$
 
 ---
 
-## 3. Transferencia de Datos (DMA)
+## 3. Transferencia de Datos (DMA) y Captura del Transitorio
 
 Para evitar que la CPU invierta ciclos de reloj leyendo los registros del ADC, el **DMA1** (Acceso Directo a Memoria) traslada automáticamente cada muestra al `adc_buffer` en la memoria RAM. 
 
-Se utiliza una arquitectura de disparo único (*Single-Shot*) para capturar un bloque transitorio definido. Al completarse la transferencia de las muestras, la interrupción del DMA desactiva el TIM2 y el ADC, protegiendo la integridad del búfer de datos contra sobreescrituras antes de que el controlador difuso procese la información.
+Se utiliza una arquitectura de disparo único (*Single-Shot*) para capturar un bloque definido de datos transitorios. Al completarse la transferencia de las muestras, la interrupción del DMA desactiva el TIM2 y el ADC. Esto congela la captura y protege la integridad del búfer contra sobreescrituras, permitiendo extraer la curva de respuesta al escalón intacta para aplicarle algoritmos de modelado e identificación de sistemas.
 
 ---
 
@@ -52,13 +52,13 @@ $$\Delta t_{slack} = T_s - T_{conv\_total}$$
 $$\Delta t_{slack} = 2.0 \text{ \mu s} - 1.5 \text{ \mu s} = 0.5 \text{ \mu s}$$
 
 > [!IMPORTANT]
-> **Estabilidad del Sistema:** El DAQ presenta una holgura del **25%** respecto al ciclo de trabajo de la señal de disparo. Esto demuestra estabilidad matemática para operar a **500 kHz** sin pérdida de tramas (*frame drops*) ni colisiones en memoria.
+> **Estabilidad del Sistema:** El DAQ presenta una holgura del **25%** respecto al ciclo de trabajo de la señal de disparo. Esto demuestra estabilidad matemática para operar a **500 kHz** sin pérdida de tramas (*frame drops*) ni colisiones en memoria durante el transitorio.
 
 ---
 
 ## 5. Integridad de Señal e Impedancia
 
-Aunque matemáticamente es posible reducir $T_{conv\_total}$ disminuyendo los ciclos de muestreo del ADC (por ejemplo, a `12.5` ciclos) para aumentar la frecuencia de adquisición, esta práctica está contraindicada para este diseño de RF.
+Aunque matemáticamente es posible reducir $T_{conv\_total}$ disminuyendo los ciclos de muestreo del ADC (por ejemplo, a **12.5** ciclos) para aumentar la frecuencia de adquisición, esta práctica está contraindicada.
 
 > [!WARNING]
-> **Riesgo de Distorsión:** Una reducción adicional del tiempo de muestreo podría introducir distorsión armónica y lecturas erróneas. Si la impedancia de salida de los detectores **LTC5596** interactúa negativamente con tiempos de carga de la red capacitiva interna del ADC inferiores a **47.5 ciclos**, el capacitor no alcanzará el voltaje en estado estacionario de la envolvente de RF, comprometiendo la precisión del lazo de control de potencia.
+> **Riesgo de Distorsión en el Modelado:** Una reducción adicional del tiempo de muestreo podría introducir distorsión armónica y lecturas erróneas. Si la impedancia de salida de los detectores **LTC5596** interactúa negativamente con tiempos de carga de la red capacitiva interna del ADC inferiores a **47.5 ciclos**, el capacitor no alcanzará el voltaje real de la envolvente de RF, lo que corrompería los datos capturados y resultaría en un modelo matemático erróneo del sistema.
