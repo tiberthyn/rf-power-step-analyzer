@@ -4,7 +4,7 @@
 Este repositorio contiene el firmware en C y las herramientas computacionales asociadas a un sistema de adquisición de datos (DAQ) de alta velocidad basado en la arquitectura STM32. El propósito central de esta instrumentación es la captura de la respuesta dinámica (respuesta al escalón) y el registro detallado del régimen transitorio en módulos atenuadores digitales. 
 
 Esta caracterización experimental constituye una fase fundamental para el modelado matemático de plantas de radiofrecuencia. Al proveer datos empíricos de alta fidelidad, el sistema permite realizar una rigurosa **identificación paramétrica del sistema** físico. Este procedimiento es esencial para extraer la función de transferencia empírica, analizar la dinámica del hardware y construir modelos matemáticos precisos del comportamiento de la potencia en transmisores 5G mmWave operando en la banda de 25 GHz.
-
+![alt text](ima2-1.png)
 ## Arquitectura de Hardware e Interfaz
 El sistema orquesta múltiples periféricos operando a nivel de hardware para garantizar latencia determinista en la captura del transitorio:
 *   **Microcontrolador:** Familia STM32L4 (Cortex-M4).
